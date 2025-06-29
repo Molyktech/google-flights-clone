@@ -10,25 +10,6 @@ export function useFlightSuggestions(query: string) {
   const [loading, setLoading] = useState(false);
   const debounced = useDebounce(query, 300);
 
-  //   useEffect(() => {
-  //     if (debounced.length < 2) return setOptions([]);
-  //     let active = true;
-  //     setLoading(true);
-
-  //     searchAirport(debounced)
-  //       .then((res) => {
-  //         if (active && res.status && res.data) {
-  //           setOptions(toLocationOptions(res.data));
-  //         }
-  //       })
-  //       .catch(() => active && setOptions([]))
-  //       .finally(() => active && setLoading(false));
-
-  //     return () => {
-  //       active = false;
-  //     };
-  //   }, [debounced]);
-
   useEffect(() => {
     if (debounced.length < 2) return setOptions([]);
     let active = true;
@@ -37,6 +18,7 @@ export function useFlightSuggestions(query: string) {
     (async () => {
       // 1) fetch initial suggestions (regions, cities, airports)
       const res = await searchAirport(debounced);
+
       if (!active) return;
 
       const initial = res.status && res.data ? toLocationOptions(res.data) : [];
@@ -60,8 +42,8 @@ export function useFlightSuggestions(query: string) {
 
       // 3) merge top-level suggestions + all fetched airports
       setOptions([...initial, ...nearbyLists.flat()]);
+
       setLoading(false);
-      console.log(options);
     })();
 
     return () => {

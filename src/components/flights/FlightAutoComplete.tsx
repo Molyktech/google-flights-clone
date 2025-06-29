@@ -1,26 +1,26 @@
 // components/FlightAutocomplete/index.tsx
 "use client";
-import React, { useEffect, useState } from "react";
+import { Flight as FlightIcon, LocationOnOutlined, TripOrigin } from "@mui/icons-material";
+import LocationCityIcon from "@mui/icons-material/LocationCity";
+import LocationOnIcon from "@mui/icons-material/LocationOn";
+import PublicIcon from "@mui/icons-material/Public";
 import {
   Autocomplete,
-  TextField,
   Box,
+  Chip,
   CircularProgress,
-  Paper,
   ClickAwayListener,
   ListItem,
   ListItemIcon,
   ListItemText,
+  Paper,
+  TextField,
   Typography,
-  Chip,
 } from "@mui/material";
-import type { LocationOption } from "../../lib/models/flight";
-import { Flight as FlightIcon, TripOrigin, LocationOnOutlined } from "@mui/icons-material";
-import PublicIcon from "@mui/icons-material/Public";
-import LocationCityIcon from "@mui/icons-material/LocationCity";
-import LocationOnIcon from "@mui/icons-material/LocationOn";
 import type { JSX } from "react";
+import React, { useEffect, useState } from "react";
 import { useFlightSuggestions } from "../../hooks/useFlightSuggestions";
+import type { LocationOption } from "../../lib/models/flight";
 
 export function getLocationIcon(type: string): JSX.Element {
   switch (type) {
@@ -44,7 +44,7 @@ export const FlightAutocomplete: React.FC<{
   disabled?: boolean;
 }> = ({ type, placeholder, value, onChange, disabled }) => {
   const [inputValue, setInputValue] = useState("");
-  const [open, setOpen] = useState(false);
+  const [, setOpen] = useState(false);
   const { options, loading } = useFlightSuggestions(inputValue);
 
   useEffect(() => {
@@ -54,35 +54,23 @@ export const FlightAutocomplete: React.FC<{
   }, [options, inputValue]);
 
   const handleSelect = (opt: LocationOption) => {
-    setInputValue(opt.suggestionTitle); // what you see in the box
-    onChange(opt); // push it up to the parent
+    setInputValue(opt.suggestionTitle);
+    onChange(opt);
     setOpen(false);
   };
-
-  // const handleChange = async (_: any, newVal: LocationOption | null) => {
-  //     if (!newVal) return
-  //     // region → load all airports
-  //     if (newVal.entityType === "COUNTRY" || newVal.entityType === "CITY") {
-  //         setOptions(airportOpts)
-  //         setInputValue(`${newVal.name} airports`)
-  //         // let the effect in #1 open the menu
-  //     } else {
-  //         handleSelect(newVal)
-  //     }
-  // }
 
   return (
     <ClickAwayListener onClickAway={() => setOpen(false)}>
       <Box sx={{ position: "relative", width: "100%", flex: 1 }}>
         <Autocomplete
-          open={open && !!options.length}
-          onOpen={() => {
-            if (inputValue.length >= 2 && options.length > 0) {
-              setOpen(true);
-            }
-          }}
-          onClose={() => setOpen(false)}
-          value={value}
+          //   open={open && !!options.length}
+          //   onOpen={() => {
+          //     if (inputValue.length >= 2 && options.length > 0) {
+          //       setOpen(true);
+          //     }
+          //   }}
+          //   onClose={() => setOpen(false)}
+          value={value === null ? undefined : value}
           onChange={(_, newVal) => newVal && handleSelect(newVal)}
           inputValue={inputValue}
           onInputChange={(_, v, r) => {
@@ -92,7 +80,7 @@ export const FlightAutocomplete: React.FC<{
             }
           }}
           options={options}
-          groupBy={(opt) => opt.parentId ?? opt.entityType}
+          groupBy={(opt) => opt.subtitle}
           getOptionLabel={(opt) => (opt.parentId ? "  " + opt.suggestionTitle : opt.suggestionTitle)}
           loading={loading}
           disabled={disabled}
@@ -130,18 +118,26 @@ export const FlightAutocomplete: React.FC<{
             />
           )}
           renderOption={(props, opt) => (
-            <ListItem {...props} key={opt.id} onClick={() => onChange(opt)}>
+            <ListItem {...props} key={opt.id} sx={{ ml: opt.entityType === "AIRPORT" ? 4 : 1 }}>
               <ListItemIcon>{getLocationIcon(opt.entityType)}</ListItemIcon>
               <ListItemText
                 primary={
                   <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                    <Typography fontWeight={500}>{opt.name}</Typography>
+                    {/* <Typography fontWeight={500}>{opt.name}</Typography> */}
+                    <Typography fontWeight={500}>{opt.suggestionTitle}</Typography>
                     <Chip label={opt.code} size="small" />
                   </Box>
                 }
-                secondary={<Typography variant="body2">{opt.subtitle}</Typography>}
+                secondary={
+                  <Typography variant="body2">{opt.entityType === "CITY" ? opt.subtitle : undefined}</Typography>
+                }
               />
             </ListItem>
+          )}
+          renderGroup={({ key, children }) => (
+            <li key={key}>
+              <ul style={{ padding: 0, margin: 0, listStyle: "none" }}>{children}</ul>
+            </li>
           )}
           PaperComponent={(paperProps) => <Paper {...paperProps} sx={{ mt: 1, maxHeight: 400, overflowY: "auto" }} />}
           noOptionsText={loading ? "Searching…" : inputValue.length < 2 ? "Type 2+ characters" : "No locations found"}

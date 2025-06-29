@@ -238,6 +238,7 @@ const FlightSearch = () => {
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [departureDate, setDepartureDate] = useState<Date | null>(null);
   const [returnDate, setReturnDate] = useState<Date | null>(null);
+  const [datePickerAnchor, setDatePickerAnchor] = useState<HTMLElement | null>(null);
 
   const filledStyle = {
     background: theme.palette.mode === "light" ? "rgba(0, 0, 0, 0.06)" : "rgba(255, 255, 255, 0.09)",
@@ -322,7 +323,7 @@ const FlightSearch = () => {
               onBlur={() => setTripTypeFocus(false)}>
               <MenuItem value="oneway">One-way</MenuItem>
               <MenuItem value="round">Round-trip</MenuItem>
-              <MenuItem value="round">Multi-city</MenuItem>
+              <MenuItem value="multi">Multi-city</MenuItem>
             </Select>
           </FormControl>
           {/* Passengers */}
@@ -373,6 +374,7 @@ const FlightSearch = () => {
           {/* Date picker */}
 
           <Box
+            ref={(el) => setDatePickerAnchor(el)}
             sx={{
               px: 2,
               minHeight: 53,
@@ -397,7 +399,7 @@ const FlightSearch = () => {
             </Typography>
           </Box>
 
-          <FlightDatePicker
+          {/* <FlightDatePicker
             open={datePickerOpen}
             onClose={() => setDatePickerOpen(false)}
             selectedDate={departureDate}
@@ -414,7 +416,34 @@ const FlightSearch = () => {
             onTripTypeChange={(type) => {
               const formatted = type === "one-way" ? "One way" : type === "round-trip" ? "Round trip" : "Multi-city";
               handleTripTypeChange(formatted);
+            }} 
+          />*/}
+          <FlightDatePicker
+            open={datePickerOpen}
+            onClose={() => setDatePickerOpen(false)}
+            anchorEl={datePickerAnchor}
+            selectedDate={departureDate}
+            selectedReturnDate={returnDate}
+            onDateSelect={(departure, returnDateSelected) => {
+              setDepartureDate(departure);
+              if (returnDateSelected) {
+                setReturnDate(returnDateSelected);
+              } else if (tripType === "One way") {
+                setReturnDate(null);
+              }
             }}
+            tripType={tripType.toLowerCase().replace(" ", "-")}
+            onTripTypeChange={(type) => {
+              handleTripTypeChange(type);
+            }}
+            searchParams={{
+              originSkyId: from?.skyId,
+              destinationSkyId: to?.skyId,
+              originEntityId: from?.entityId,
+              destinationEntityId: to?.entityId,
+            }}
+            showPrices={true}
+            fetchPrices={true}
           />
         </Box>
 
