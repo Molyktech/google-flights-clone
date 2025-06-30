@@ -1,11 +1,10 @@
-import React from "react";
 import { Chip, Container, Divider, Link, Typography, useMediaQuery, useTheme } from "@mui/material";
 import Grid from "@mui/material/Grid";
 
 import {
   Language as LanguageIcon,
-  Payments as PaymentsIcon,
   LocationOnOutlined as LocationOnOutlinedIcon,
+  Payments as PaymentsIcon,
 } from "@mui/icons-material";
 
 const Footer = () => {
@@ -30,7 +29,7 @@ const Footer = () => {
           textAlign: "center",
         }}>
         <Grid size={12}>
-          <Divider sx={{ my: 1, borderColor: theme.palette.text.primary }} />
+          <Divider sx={{ my: 1 }} />
         </Grid>
         <Grid size={{ xs: 12, md: 8 }} sx={{ gap: 2, display: "flex", flexWrap: "wrap" }}>
           {footerData?.map((item, index) => (

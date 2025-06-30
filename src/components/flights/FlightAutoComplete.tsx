@@ -1,5 +1,3 @@
-// components/FlightAutocomplete/index.tsx
-"use client";
 import { Flight as FlightIcon, LocationOnOutlined, TripOrigin } from "@mui/icons-material";
 import LocationCityIcon from "@mui/icons-material/LocationCity";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
@@ -48,6 +46,12 @@ export const FlightAutocomplete: React.FC<{
   const { options, loading } = useFlightSuggestions(inputValue);
 
   useEffect(() => {
+    if (value) {
+      setInputValue(value.suggestionTitle);
+    }
+  }, [value]);
+
+  useEffect(() => {
     if (options.length > 0 && inputValue.length >= 2) {
       setOpen(true);
     }
@@ -61,18 +65,12 @@ export const FlightAutocomplete: React.FC<{
 
   return (
     <ClickAwayListener onClickAway={() => setOpen(false)}>
-      <Box sx={{ position: "relative", width: "100%", flex: 1 }}>
+      <Box sx={{ position: "relative", width: "100%", flex: 1, minWidth: 0 }}>
         <Autocomplete
-          //   open={open && !!options.length}
-          //   onOpen={() => {
-          //     if (inputValue.length >= 2 && options.length > 0) {
-          //       setOpen(true);
-          //     }
-          //   }}
-          //   onClose={() => setOpen(false)}
-          value={value === null ? undefined : value}
+          sx={{ width: "100%", maxWidth: { xs: "354px", lg: "100%" } }}
+          value={value || undefined}
           onChange={(_, newVal) => newVal && handleSelect(newVal)}
-          inputValue={inputValue}
+          inputValue={inputValue || ""}
           onInputChange={(_, v, r) => {
             if (r === "input") {
               setInputValue(v);
@@ -118,28 +116,51 @@ export const FlightAutocomplete: React.FC<{
             />
           )}
           renderOption={(props, opt) => (
-            <ListItem {...props} key={opt.id} sx={{ ml: opt.entityType === "AIRPORT" ? 4 : 1 }}>
+            <ListItem
+              {...props}
+              key={opt.id}
+              sx={{ ml: opt.entityType === "AIRPORT" ? 4 : 2, overflow: "hidden", maxWidth: "100%" }}>
               <ListItemIcon>{getLocationIcon(opt.entityType)}</ListItemIcon>
               <ListItemText
                 primary={
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                    {/* <Typography fontWeight={500}>{opt.name}</Typography> */}
-                    <Typography fontWeight={500}>{opt.suggestionTitle}</Typography>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1, overflow: "hidden", maxWidth: "100%" }}>
+                    <Typography
+                      fontWeight={500}
+                      sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 180 }}>
+                      {opt.suggestionTitle}
+                    </Typography>
                     <Chip label={opt.code} size="small" />
                   </Box>
                 }
                 secondary={
-                  <Typography variant="body2">{opt.entityType === "CITY" ? opt.subtitle : undefined}</Typography>
+                  <Typography
+                    variant="body2"
+                    sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 180 }}>
+                    {opt.entityType === "CITY" ? opt.subtitle : undefined}
+                  </Typography>
                 }
               />
             </ListItem>
           )}
           renderGroup={({ key, children }) => (
-            <li key={key}>
+            <li key={key} style={{ overflow: "hidden" }}>
               <ul style={{ padding: 0, margin: 0, listStyle: "none" }}>{children}</ul>
             </li>
           )}
-          PaperComponent={(paperProps) => <Paper {...paperProps} sx={{ mt: 1, maxHeight: 400, overflowY: "auto" }} />}
+          PaperComponent={(paperProps) => (
+            <Paper
+              {...paperProps}
+              sx={{
+                mt: 1,
+                minWidth: 350,
+                width: "min(600px, 90vw)",
+                maxWidth: "98vw",
+                left: 0,
+                right: 0,
+                mx: "auto",
+              }}
+            />
+          )}
           noOptionsText={loading ? "Searching…" : inputValue.length < 2 ? "Type 2+ characters" : "No locations found"}
         />
       </Box>

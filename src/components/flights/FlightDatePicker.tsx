@@ -1,3 +1,5 @@
+/* eslint-disable */
+
 import { CalendarToday, ChevronLeft, ChevronRight, KeyboardArrowDown } from "@mui/icons-material";
 import {
   Box,
@@ -11,9 +13,12 @@ import {
   Popper,
   Select,
   Typography,
+  useTheme,
 } from "@mui/material";
 import type React from "react";
 import { useEffect, useState } from "react";
+import type { DatePrice, PriceData } from "../../lib/models/flight";
+import { getPriceCalendar } from "../../services/flight-api";
 
 interface DatePickerProps {
   open: boolean;
@@ -39,23 +44,6 @@ interface DatePickerProps {
   fetchPrices?: boolean;
 }
 
-interface DatePrice {
-  date: number;
-  price: string;
-  priceValue: number;
-  isSelected?: boolean;
-  isReturnSelected?: boolean;
-  isInRange?: boolean;
-  isDisabled?: boolean;
-  isPast?: boolean;
-  isLowestPrice?: boolean;
-  isHighestPrice?: boolean;
-}
-
-interface PriceData {
-  [key: string]: number; // date string -> price
-}
-
 const FlightDatePicker: React.FC<DatePickerProps> = ({
   open,
   onClose,
@@ -66,7 +54,6 @@ const FlightDatePicker: React.FC<DatePickerProps> = ({
   tripType,
   onTripTypeChange,
   searchParams,
-  customPrices,
   showPrices = true,
   fetchPrices = true,
 }) => {
@@ -80,6 +67,8 @@ const FlightDatePicker: React.FC<DatePickerProps> = ({
   const [priceLoadingFailed, setPriceLoadingFailed] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [hasPricesLoaded, setHasPricesLoaded] = useState(false);
+  const [loadedMonths, setLoadedMonths] = useState<{ [key: string]: boolean }>({});
+  const theme = useTheme();
 
   const monthNames = [
     "January",
@@ -112,63 +101,67 @@ const FlightDatePicker: React.FC<DatePickerProps> = ({
     }
   }, [tripType]);
 
-  // Only load prices when we have valid search params and the picker is open
-  useEffect(() => {
-    const shouldFetchPrices =
-      fetchPrices && showPrices && searchParams?.originSkyId && searchParams?.destinationSkyId && open;
+  // Helper to get first/last day of a month
+  const getMonthRange = (date: Date) => {
+    const firstDay = new Date(date.getFullYear(), date.getMonth(), 1);
+    const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+    return {
+      fromDate: (firstDay < today ? today : firstDay).toISOString().split("T")[0],
+      toDate: lastDay.toISOString().split("T")[0],
+      key: `${firstDay.getFullYear()}-${firstDay.getMonth()}`,
+    };
+  };
 
-    if (shouldFetchPrices) {
-      loadPriceData();
-    } else {
-      // Clear prices if we don't have valid search params
-      setPriceData({});
-      setHasPricesLoaded(false);
-    }
-  }, [searchParams?.originSkyId, searchParams?.destinationSkyId, currentMonth, open, fetchPrices, showPrices]);
-
-  // Handle custom prices
-  useEffect(() => {
-    if (customPrices) {
-      setPriceData(customPrices);
-      setHasPricesLoaded(true);
-    }
-  }, [customPrices]);
-
-  const loadPriceData = async () => {
-    if (!searchParams?.originSkyId || !searchParams?.destinationSkyId) return;
-
+  // Load prices for a given month if not already loaded
+  const loadMonthPrices = async (monthDate: Date) => {
+    const { fromDate, toDate, key } = getMonthRange(monthDate);
+    if (loadedMonths[key]) return; // Already loaded
     setLoadingPrices(true);
     setPriceLoadingFailed(false);
-
     try {
-      // Simulate API delay for demo
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const priceCalendarData = await getPriceCalendar({
+        originSkyId: searchParams?.originSkyId || "",
+        destinationSkyId: searchParams?.destinationSkyId || "",
+        originEntityId: searchParams?.originEntityId || "",
+        destinationEntityId: searchParams?.destinationEntityId || "",
+        fromDate,
+        toDate,
+        currency: "NGN",
+      });
+      const newPrices: PriceData = {};
+      if (priceCalendarData?.data?.flights?.days && Array.isArray(priceCalendarData.data.flights.days)) {
+        priceCalendarData.data.flights.days.forEach((dayObj: any) => {
+          if (dayObj.day && typeof dayObj.price === "number") {
+            newPrices[dayObj.day] = dayObj.price;
+          }
+        });
+      }
 
-      const mockPrices = generateMockPrices();
-      setPriceData(mockPrices);
+      setPriceData((prev) => ({ ...prev, ...newPrices }));
+      setLoadedMonths((prev) => ({ ...prev, [key]: true }));
       setHasPricesLoaded(true);
     } catch (error) {
-      console.error("Error loading price data:", error);
       setPriceLoadingFailed(true);
-      setPriceData({});
     } finally {
       setLoadingPrices(false);
     }
   };
 
-  const generateMockPrices = (): PriceData => {
-    const prices: PriceData = {};
-    const basePrice = 130000; // ₦130K base
-
-    for (let i = 1; i <= 62; i++) {
-      const date = new Date(currentMonth.getFullYear(), currentMonth.getMonth(), i);
-      const dateStr = date.toISOString().split("T")[0];
-      const variation = Math.random() * 50000 - 25000; // ±₦25K variation
-      prices[dateStr] = Math.max(105000, basePrice + variation); // Min ₦105K
+  // Effect: load prices for current and next month when visible or month changes
+  useEffect(() => {
+    if (fetchPrices && showPrices && searchParams?.originSkyId && searchParams?.destinationSkyId && open) {
+      loadMonthPrices(currentMonth);
+      const nextMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1);
+      loadMonthPrices(nextMonth);
     }
+  }, [searchParams?.originSkyId, searchParams?.destinationSkyId, currentMonth, open, fetchPrices, showPrices]);
 
-    return prices;
-  };
+  // Reset loaded months and prices when search params change
+  useEffect(() => {
+    setPriceData({});
+    setLoadedMonths({});
+    setHasPricesLoaded(false);
+  }, [searchParams?.originSkyId, searchParams?.destinationSkyId]);
 
   const formatPrice = (price: number): string => {
     if (price >= 1000) {
@@ -233,9 +226,9 @@ const FlightDatePicker: React.FC<DatePickerProps> = ({
       const isPast = isDateInPast(currentDate);
       const { price, priceValue, isLowestPrice } = getPriceForDate(currentDate);
 
-      const isSelected = departureDate && currentDate.getTime() === departureDate.getTime();
-      const isReturnSelected = returnDate && currentDate.getTime() === returnDate.getTime();
-      const isInRange = isDateInRange(currentDate);
+      const isSelected = !!(departureDate && currentDate.getTime() === departureDate.getTime());
+      const isReturnSelected = !!(returnDate && currentDate.getTime() === returnDate.getTime());
+      const isInRange = !!isDateInRange(currentDate);
 
       days.push({
         date,
@@ -254,6 +247,9 @@ const FlightDatePicker: React.FC<DatePickerProps> = ({
   };
 
   const navigateMonth = (direction: "prev" | "next") => {
+    // Save scroll position
+    const prevScrollY = window.scrollY;
+
     setCurrentMonth((prev) => {
       const newMonth = new Date(prev);
       if (direction === "prev") {
@@ -270,6 +266,11 @@ const FlightDatePicker: React.FC<DatePickerProps> = ({
       }
       return newMonth;
     });
+
+    // Restore scroll position after DOM update
+    setTimeout(() => {
+      window.scrollTo({ top: prevScrollY, behavior: "smooth" });
+    }, 0);
   };
 
   const handleDateClick = (date: number, monthDate: Date) => {
@@ -387,6 +388,10 @@ const FlightDatePicker: React.FC<DatePickerProps> = ({
       style={{ zIndex: 1300 }}
       modifiers={[
         {
+          name: "flip",
+          enabled: false, // disables flipping
+        },
+        {
           name: "offset",
           options: {
             offset: [0, 8],
@@ -398,23 +403,21 @@ const FlightDatePicker: React.FC<DatePickerProps> = ({
           <Paper
             elevation={8}
             sx={{
-              bgcolor: "background.paper",
+              bgcolor: theme.palette.background.paper,
               border: "1px solid",
-              borderColor: "divider",
+              borderColor: theme.palette.divider,
               borderRadius: "12px",
-              overflow: "hidden",
-              width: { xs: "90vw", sm: "600px", md: "650px" },
-              maxWidth: "650px",
+              width: "100%",
+              minWidth: 320,
             }}>
             <ClickAwayListener onClickAway={handleClickAway}>
-              <Box sx={{ p: { xs: 2, sm: 3 } }}>
+              <Box sx={{ p: "16px 8px 8px" }}>
                 {/* Header */}
                 <Box
                   sx={{
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
-                    mb: 3,
                     flexWrap: { xs: "wrap", sm: "nowrap" },
                     gap: 2,
                   }}>
@@ -441,12 +444,12 @@ const FlightDatePicker: React.FC<DatePickerProps> = ({
                         disablePortal: false,
                         PaperProps: {
                           sx: { zIndex: 1500 },
-                          onMouseDown: (e) => e.stopPropagation(),
-                          onClick: (e) => e.stopPropagation(),
+                          onMouseDown: (e: React.MouseEvent) => e.stopPropagation(),
+                          onClick: (e: React.MouseEvent) => e.stopPropagation(),
                         },
                         MenuListProps: {
-                          onMouseDown: (e) => e.stopPropagation(),
-                          onClick: (e) => e.stopPropagation(),
+                          onMouseDown: (e: React.MouseEvent) => e.stopPropagation(),
+                          onClick: (e: React.MouseEvent) => e.stopPropagation(),
                         },
                       }}>
                       <MenuItem value="oneway">One-way</MenuItem>
@@ -459,7 +462,7 @@ const FlightDatePicker: React.FC<DatePickerProps> = ({
                     variant="text"
                     onClick={handleReset}
                     sx={{
-                      color: "primary.main",
+                      color: theme.palette.primary.main,
                       textTransform: "none",
                       fontWeight: 500,
                       fontSize: "0.875rem",
@@ -474,14 +477,14 @@ const FlightDatePicker: React.FC<DatePickerProps> = ({
                       display: "flex",
                       alignItems: "center",
                       border: "1px solid",
-                      borderColor: "divider",
+                      borderColor: theme.palette.divider,
                       borderRadius: "8px",
                       px: 2,
                       py: 1.5,
                       minWidth: { xs: "100%", sm: "240px" },
-                      bgcolor: "background.default",
+                      bgcolor: theme.palette.background.default,
                     }}>
-                    <CalendarToday sx={{ mr: 1.5, fontSize: 20, color: "text.secondary" }} />
+                    <CalendarToday sx={{ mr: 1.5, fontSize: 20, color: theme.palette.text.secondary }} />
                     <Typography variant="body1" sx={{ flex: 1, fontWeight: 500, fontSize: "0.875rem" }}>
                       {getDateRangeText()}
                     </Typography>
@@ -489,44 +492,31 @@ const FlightDatePicker: React.FC<DatePickerProps> = ({
                 </Box>
 
                 {/* Calendar with Navigation */}
-                <Box sx={{ position: "relative" }}>
-                  {/* Navigation Arrows */}
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: { xs: 1, sm: 2 },
+                    minHeight: { xs: 480, sm: 480 }, // Ensures stable height for 6 weeks
+                    height: { xs: 480, sm: 480 },
+                    width: "100%",
+                    overflow: "visible",
+                  }}>
+                  {/* Left Chevron */}
                   <IconButton
                     onClick={() => navigateMonth("prev")}
                     disabled={!canGoPrevious}
                     sx={{
-                      position: "absolute",
-                      left: { xs: -10, sm: -20 },
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      zIndex: 10,
-                      bgcolor: "background.paper",
+                      bgcolor: theme.palette.background.paper,
                       border: "1px solid",
-                      borderColor: "divider",
+                      borderColor: theme.palette.divider,
                       width: { xs: 32, sm: 40 },
                       height: { xs: 32, sm: 40 },
-                      "&:hover": { bgcolor: "action.hover" },
+                      "&:hover": { bgcolor: theme.palette.action.hover },
                       "&:disabled": { opacity: 0.3 },
                     }}>
                     <ChevronLeft sx={{ fontSize: { xs: 18, sm: 24 } }} />
-                  </IconButton>
-
-                  <IconButton
-                    onClick={() => navigateMonth("next")}
-                    sx={{
-                      position: "absolute",
-                      right: { xs: -10, sm: -15 },
-                      top: "50%",
-                      transform: "translateY(-50%)",
-                      zIndex: 10,
-                      bgcolor: "background.paper",
-                      border: "1px solid",
-                      borderColor: "divider",
-                      width: { xs: 32, sm: 40 },
-                      height: { xs: 32, sm: 40 },
-                      "&:hover": { bgcolor: "action.hover" },
-                    }}>
-                    <ChevronRight sx={{ fontSize: { xs: 18, sm: 24 } }} />
                   </IconButton>
 
                   {/* Calendar Grid */}
@@ -535,6 +525,7 @@ const FlightDatePicker: React.FC<DatePickerProps> = ({
                       display: "flex",
                       gap: { xs: 2, sm: 3 },
                       flexDirection: { xs: "column", sm: "row" },
+                      flex: 1,
                     }}>
                     {/* Current Month */}
                     <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -548,14 +539,13 @@ const FlightDatePicker: React.FC<DatePickerProps> = ({
                         }}>
                         {monthNames[currentMonth.getMonth()]}
                       </Typography>
-
                       {/* Day Headers */}
                       <Box sx={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 0.5, mb: 1 }}>
-                        {dayNames.map((day) => (
-                          <Box key={day} sx={{ textAlign: "center", py: 0.5 }}>
+                        {dayNames.map((day, index) => (
+                          <Box key={day + index} sx={{ textAlign: "center", py: 0.5 }}>
                             <Typography
                               variant="caption"
-                              color="text.secondary"
+                              color={theme.palette.text.secondary}
                               sx={{
                                 fontWeight: 500,
                                 fontSize: { xs: "0.7rem", sm: "0.75rem" },
@@ -565,9 +555,8 @@ const FlightDatePicker: React.FC<DatePickerProps> = ({
                           </Box>
                         ))}
                       </Box>
-
                       {/* Calendar Days */}
-                      <Box sx={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 0.5 }}>
+                      <Box sx={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 0.5, minWidth: 320 }}>
                         {currentMonthDays.map((day, index) => (
                           <Box key={index} sx={{ textAlign: "center" }}>
                             {day.date > 0 ? (
@@ -577,30 +566,30 @@ const FlightDatePicker: React.FC<DatePickerProps> = ({
                                   cursor: day.isDisabled ? "not-allowed" : "pointer",
                                   p: { xs: 0.5, sm: 1 },
                                   borderRadius: "6px",
-                                  minHeight: { xs: "40px", sm: "50px" },
+
                                   display: "flex",
                                   flexDirection: "column",
                                   alignItems: "center",
                                   justifyContent: "center",
                                   bgcolor:
                                     day.isSelected || day.isReturnSelected
-                                      ? "primary.main"
+                                      ? theme.palette.primary.main
                                       : day.isInRange
-                                        ? "primary.light"
+                                        ? theme.palette.primary.light
                                         : "transparent",
                                   color:
                                     day.isSelected || day.isReturnSelected
                                       ? "white"
                                       : day.isDisabled
-                                        ? "text.disabled"
-                                        : "text.primary",
+                                        ? theme.palette.text.disabled
+                                        : theme.palette.text.primary,
                                   opacity: day.isDisabled ? 0.5 : 1,
                                   "&:hover": {
                                     bgcolor: day.isDisabled
                                       ? "transparent"
                                       : day.isSelected || day.isReturnSelected
-                                        ? "primary.dark"
-                                        : "action.hover",
+                                        ? theme.palette.primary.dark
+                                        : theme.palette.action.hover,
                                   },
                                 }}>
                                 <Typography
@@ -620,8 +609,8 @@ const FlightDatePicker: React.FC<DatePickerProps> = ({
                                         day.isSelected || day.isReturnSelected
                                           ? "white"
                                           : day.isLowestPrice
-                                            ? "success.main"
-                                            : "text.secondary",
+                                            ? theme.palette.success.main
+                                            : theme.palette.text.secondary,
                                       fontWeight: day.isLowestPrice ? 600 : 400,
                                       fontSize: { xs: "0.6rem", sm: "0.7rem" },
                                       lineHeight: 1,
@@ -634,13 +623,12 @@ const FlightDatePicker: React.FC<DatePickerProps> = ({
                                 )}
                               </Box>
                             ) : (
-                              <Box sx={{ p: { xs: 0.5, sm: 1 }, minHeight: { xs: "40px", sm: "50px" } }} />
+                              <Box sx={{ p: { xs: 0.5, sm: 1 } }} />
                             )}
                           </Box>
                         ))}
                       </Box>
                     </Box>
-
                     {/* Next Month */}
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Typography
@@ -653,14 +641,13 @@ const FlightDatePicker: React.FC<DatePickerProps> = ({
                         }}>
                         {monthNames[nextMonth.getMonth()]}
                       </Typography>
-
                       {/* Day Headers */}
                       <Box sx={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 0.5, mb: 1 }}>
-                        {dayNames.map((day) => (
-                          <Box key={day} sx={{ textAlign: "center", py: 0.5 }}>
+                        {dayNames.map((day, index) => (
+                          <Box key={day + index} sx={{ textAlign: "center", py: 0.5 }}>
                             <Typography
                               variant="caption"
-                              color="text.secondary"
+                              color={theme.palette.text.secondary}
                               sx={{
                                 fontWeight: 500,
                                 fontSize: { xs: "0.7rem", sm: "0.75rem" },
@@ -670,7 +657,6 @@ const FlightDatePicker: React.FC<DatePickerProps> = ({
                           </Box>
                         ))}
                       </Box>
-
                       {/* Calendar Days */}
                       <Box sx={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 0.5 }}>
                         {nextMonthDays.map((day, index) => (
@@ -682,30 +668,30 @@ const FlightDatePicker: React.FC<DatePickerProps> = ({
                                   cursor: day.isDisabled ? "not-allowed" : "pointer",
                                   p: { xs: 0.5, sm: 1 },
                                   borderRadius: "6px",
-                                  minHeight: { xs: "40px", sm: "50px" },
+
                                   display: "flex",
                                   flexDirection: "column",
                                   alignItems: "center",
                                   justifyContent: "center",
                                   bgcolor:
                                     day.isSelected || day.isReturnSelected
-                                      ? "primary.main"
+                                      ? theme.palette.primary.main
                                       : day.isInRange
-                                        ? "primary.light"
+                                        ? theme.palette.primary.light
                                         : "transparent",
                                   color:
                                     day.isSelected || day.isReturnSelected
                                       ? "white"
                                       : day.isDisabled
-                                        ? "text.disabled"
-                                        : "text.primary",
+                                        ? theme.palette.text.disabled
+                                        : theme.palette.text.primary,
                                   opacity: day.isDisabled ? 0.5 : 1,
                                   "&:hover": {
                                     bgcolor: day.isDisabled
                                       ? "transparent"
                                       : day.isSelected || day.isReturnSelected
-                                        ? "primary.dark"
-                                        : "action.hover",
+                                        ? theme.palette.primary.dark
+                                        : theme.palette.action.hover,
                                   },
                                 }}>
                                 <Typography
@@ -725,8 +711,8 @@ const FlightDatePicker: React.FC<DatePickerProps> = ({
                                         day.isSelected || day.isReturnSelected
                                           ? "white"
                                           : day.isLowestPrice
-                                            ? "success.main"
-                                            : "text.secondary",
+                                            ? theme.palette.success.main
+                                            : theme.palette.text.secondary,
                                       fontWeight: day.isLowestPrice ? 600 : 400,
                                       fontSize: { xs: "0.6rem", sm: "0.7rem" },
                                       lineHeight: 1,
@@ -739,13 +725,26 @@ const FlightDatePicker: React.FC<DatePickerProps> = ({
                                 )}
                               </Box>
                             ) : (
-                              <Box sx={{ p: { xs: 0.5, sm: 1 }, minHeight: { xs: "40px", sm: "50px" } }} />
+                              <Box sx={{ p: { xs: 0.5, sm: 1 } }} />
                             )}
                           </Box>
                         ))}
                       </Box>
                     </Box>
                   </Box>
+                  {/* Right Chevron */}
+                  <IconButton
+                    onClick={() => navigateMonth("next")}
+                    sx={{
+                      bgcolor: theme.palette.background.paper,
+                      border: "1px solid",
+                      borderColor: theme.palette.divider,
+                      width: { xs: 32, sm: 40 },
+                      height: { xs: 32, sm: 40 },
+                      "&:hover": { bgcolor: theme.palette.action.hover },
+                    }}>
+                    <ChevronRight sx={{ fontSize: { xs: 18, sm: 24 } }} />
+                  </IconButton>
                 </Box>
 
                 {/* Footer */}
@@ -755,16 +754,15 @@ const FlightDatePicker: React.FC<DatePickerProps> = ({
                     justifyContent: "flex-end",
                     alignItems: "center",
                     gap: 2,
-                    mt: 3,
-                    pt: 2,
+
                     borderTop: "1px solid",
-                    borderColor: "divider",
+                    borderColor: theme.palette.divider,
                   }}>
                   <Button
                     variant="text"
                     onClick={handleCancel}
                     sx={{
-                      color: "text.secondary",
+                      color: theme.palette.text.secondary,
                       textTransform: "none",
                       fontWeight: 500,
                       px: 3,

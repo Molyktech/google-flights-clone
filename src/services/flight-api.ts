@@ -1,6 +1,11 @@
 /* eslint-disable */
-import type { SearchAirportResponse, NearbyAirportsResponse } from "../lib/models/flight";
-import { MOCK_DATA } from "./mock-data";
+import type {
+  SearchAirportResponse,
+  NearbyAirportsResponse,
+  SearchFlightResponse,
+  PriceCalendarResponse,
+} from "../lib/models/flight";
+import { MOCK_DATA, MOCK_FLIGHT_PRICES, SEARCH_FLIGHT_RESPONSE } from "./mock-data";
 
 // --- Config ---
 const FLIGHT_API_BASE_URL = import.meta.env.VITE_FLIGHT_API_BASE_URL || "https://sky-scrapper.p.rapidapi.com/api/";
@@ -10,7 +15,7 @@ const FLIGHT_API_BASE_URL = import.meta.env.VITE_FLIGHT_API_BASE_URL || "https:/
  * Get common headers for RapidAPI requests
  */
 const getHeaders = () => ({
-  "X-RapidAPI-Key": import.meta.env.VITE_RAPIDAPI_KEY || "54f89fd97dmshd023b771436df2dp11e39bjsn6f7240e3d68e",
+  "X-RapidAPI-Key": import.meta.env.VITE_RAPIDAPI_KEY,
   "X-RapidAPI-Host": "sky-scrapper.p.rapidapi.com",
 });
 
@@ -38,17 +43,17 @@ export const searchAirport = async (query: string): Promise<SearchAirportRespons
   const url = `${FLIGHT_API_BASE_URL}v1/flights/searchAirport?query=${encodeURIComponent(query)}&locale=en-US`;
   const options = { method: "GET", headers: getHeaders() };
   try {
-    // const data = await rapidApiFetch<SearchAirportResponse>(url, options);
-    const data = MOCK_DATA;
-    // if (Array.isArray((data as any).data)) {
-    //     console.log("here",data);
-    //   return data as SearchAirportResponse;
-    // } else if (Array.isArray(data)) {
-    //   return { status: true, data } as SearchAirportResponse;
-    // } else {
-    //   return { status: false, data: [] } as SearchAirportResponse;
-    // }
-    return data as SearchAirportResponse;
+    const data = await rapidApiFetch<SearchAirportResponse>(url, options);
+
+    if (Array.isArray((data as any).data)) {
+      return data as SearchAirportResponse;
+    } else if (Array.isArray(data)) {
+      return { status: true, data } as SearchAirportResponse;
+    } else {
+      return { status: false, data: [] } as SearchAirportResponse;
+    }
+    //       const data = MOCK_DATA;
+    //  return data as SearchAirportResponse;
   } catch (error) {
     return { status: false, data: [] };
   }
@@ -82,25 +87,41 @@ export const searchFlightsComplete = async (params: {
   sortBy?: string;
   limit?: number;
   currency?: string;
-}) => {
-  const queryParams = new URLSearchParams({
-    originSkyId: params.originSkyId,
-    destinationSkyId: params.destinationSkyId,
-    originEntityId: params.originEntityId,
-    destinationEntityId: params.destinationEntityId,
-    date: params.date,
-    cabinClass: params.cabinClass,
-    adults: params.adults.toString(),
-    sortBy: params.sortBy || "best",
-    limit: (params.limit || 50).toString(),
-    currency: params.currency || "USD",
-    ...(params.returnDate && { returnDate: params.returnDate }),
-  });
-  const url = `${FLIGHT_API_BASE_URL}v2/flights/searchFlightsComplete?${queryParams}`;
-  const options = { method: "GET", headers: getHeaders() };
-  return rapidApiFetch(url, options);
+}): Promise<SearchFlightResponse> => {
+  try {
+    const queryParams = new URLSearchParams({
+      originSkyId: params.originSkyId,
+      destinationSkyId: params.destinationSkyId,
+      originEntityId: params.originEntityId,
+      destinationEntityId: params.destinationEntityId,
+      date: params.date,
+      cabinClass: params.cabinClass,
+      adults: params.adults.toString(),
+      sortBy: params.sortBy || "best",
+      limit: (params.limit || 50).toString(),
+      currency: params.currency || "USD",
+      ...(params.returnDate && { returnDate: params.returnDate }),
+    });
+    const url = `${FLIGHT_API_BASE_URL}v2/flights/searchFlightsComplete?${queryParams}`;
+    const options = { method: "GET", headers: getHeaders() };
+    //return rapidApiFetch(url, options);
+    return SEARCH_FLIGHT_RESPONSE;
+  } catch (error) {
+    console.error("searchFlightsComplete error:", error);
+    return {
+      status: false,
+      timestamp: Date.now(),
+      sessionId: "",
+      data: {
+        context: { status: "error", totalResults: 0 },
+        itineraries: [],
+        messages: [],
+        filterStats: {} as any,
+      },
+      // Removed 'error' property as it is not part of SearchFlightResponse type
+    };
+  }
 };
-
 /**
  * Search flights everywhere from a specific origin
  */
@@ -131,17 +152,35 @@ export const getPriceCalendar = async (params: {
   destinationSkyId: string;
   originEntityId: string;
   destinationEntityId: string;
-  month: string;
-  year: string;
+  fromDate: string;
+  toDate: string;
   currency?: string;
-}) => {
+}): Promise<PriceCalendarResponse> => {
+  // MOCK:
+  // const from = new Date(params.fromDate);
+  // const to = new Date(params.toDate);
+  // const filteredDays = MOCK_FLIGHT_PRICES.data.flights.days.filter((d) => {
+  //   const dayDate = new Date(d.day);
+  //   return dayDate >= from && dayDate <= to;
+  // });
+  // return {
+  //   ...MOCK_FLIGHT_PRICES,
+  //   data: {
+  //     flights: {
+  //       ...MOCK_FLIGHT_PRICES.data.flights,
+  //       days: filteredDays,
+  //     },
+  //   },
+  // };
+
+  // --- Original API call (commented out for easy revert) ---
   const queryParams = new URLSearchParams({
     originSkyId: params.originSkyId,
     destinationSkyId: params.destinationSkyId,
     originEntityId: params.originEntityId,
     destinationEntityId: params.destinationEntityId,
-    month: params.month,
-    year: params.year,
+    fromDate: params.fromDate,
+    toDate: params.toDate,
     currency: params.currency || "USD",
   });
   const url = `${FLIGHT_API_BASE_URL}v1/flights/getPriceCalendar?${queryParams}`;

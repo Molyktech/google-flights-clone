@@ -64,6 +64,7 @@ const Navbar = () => {
             sx={{
               textTransform: "capitalize",
               backgroundColor: theme.palette.primary.main,
+              display: { xs: "none", sm: "block" },
             }}>
             Sign in
           </Button>

@@ -5,7 +5,7 @@ import type { LocationOption, Airport, NearbyAirport } from "./models/flight";
  */
 export function toLocationOptions(items: Array<Airport | NearbyAirport>): LocationOption[] {
   return items.map((item) => {
-    // If it has `presentation`, it’s the full Airport shape
+    // If it has `presentation`, it's the full Airport shape
     if ("presentation" in item) {
       const { presentation, navigation, skyId, entityId } = item as Airport;
       const match = presentation.suggestionTitle.match(/\(([^)]+)\)/);
@@ -23,7 +23,7 @@ export function toLocationOptions(items: Array<Airport | NearbyAirport>): Locati
       };
     }
 
-    // Otherwise it’s a NearbyAirport
+    // Otherwise it's a NearbyAirport
     const na = item as NearbyAirport;
     return {
       id: `${na.skyId}_${na.entityId}`,
@@ -46,3 +46,29 @@ export const formatDate = (date: Date | null) => {
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   return `${days[date.getDay()]} ${date.getDate()} ${months[date.getMonth()]}`;
 };
+
+export function formatToISODateString(date: string | Date | undefined | null): string | undefined {
+  if (!date) return undefined;
+  const d = typeof date === "string" ? new Date(date) : date;
+  if (isNaN(d.getTime())) return undefined;
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export function parseSearchParams(search: string) {
+  const params = new URLSearchParams(search);
+  return {
+    tripType: params.get("tripType") || undefined,
+    from: params.get("from") || undefined,
+    to: params.get("to") || undefined,
+    departureDate: params.get("departureDate") || undefined,
+    returnDate: params.get("returnDate") || undefined,
+    adults: params.get("adults") ? Number(params.get("adults")) : undefined,
+    children: params.get("children") ? Number(params.get("children")) : undefined,
+    infantsSeat: params.get("infantsSeat") ? Number(params.get("infantsSeat")) : undefined,
+    infantsLap: params.get("infantsLap") ? Number(params.get("infantsLap")) : undefined,
+    flightClass: params.get("flightClass") || undefined,
+  };
+}

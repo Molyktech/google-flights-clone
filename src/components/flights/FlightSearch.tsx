@@ -1,15 +1,16 @@
-import { CalendarToday } from "@mui/icons-material";
-import CalendarTodayIcon from "@mui/icons-material/CalendarToday";
+import { CalendarToday, Search } from "@mui/icons-material";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import SwapHorizIcon from "@mui/icons-material/SwapHoriz";
 import {
+  Alert,
   Box,
   Button,
   Divider,
   FormControl,
   IconButton,
   Input,
+  LinearProgress,
   List,
   ListItem,
   ListItemText,
@@ -17,18 +18,27 @@ import {
   Paper,
   Popover,
   Select,
+  Snackbar,
   Typography,
   useTheme,
 } from "@mui/material";
 import { LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import type { LocationOption, PassengerCounts } from "../../lib/models/flight";
-import { formatDate } from "../../lib/utils";
+import { formatDate, toLocationOptions } from "../../lib/utils";
+import { searchAirport } from "../../services/flight-api";
+import { MOCK_DATA } from "../../services/mock-data";
 import { FlightAutocomplete } from "./FlightAutoComplete";
 import FlightDatePicker from "./FlightDatePicker";
 
-const classes = ["Economy", "Premium Economy", "Business", "First"];
+const classes = {
+  economy: "Economy",
+  premium_economy: "Premium Economy",
+  business: "Business",
+  first: "First",
+};
 
 interface PassengerSelectorProps {
   value: PassengerCounts;
@@ -224,21 +234,89 @@ function PassengerSelector({ value, onChange }: PassengerSelectorProps) {
   );
 }
 
-const FlightSearch = () => {
+interface FlightSearchPrefill {
+  tripType?: string;
+  from?: string;
+  to?: string;
+  departureDate?: string;
+  returnDate?: string;
+  adults?: number;
+  children?: number;
+  infantsSeat?: number;
+  infantsLap?: number;
+  flightClass?: string;
+}
+
+interface FlightSearchProps {
+  isDarkMode: boolean;
+  prefill?: FlightSearchPrefill;
+}
+
+// Module-level cache for LocationOption objects
+const locationOptionCache: Record<string, LocationOption> = {};
+
+const getLocationOptionById = (id: string | undefined): LocationOption | null => {
+  if (!id) return null;
+  if (locationOptionCache[id]) return locationOptionCache[id];
+  // fallback to mock data for now
+  const options = toLocationOptions(MOCK_DATA.data);
+  return options.find((opt) => opt.id === id) || null;
+};
+
+const FlightSearch = ({ isDarkMode, prefill }: FlightSearchProps) => {
   const theme = useTheme();
-  const [tripType, setTripType] = useState("oneway");
-  const [from, setFrom] = useState<LocationOption | null>(null);
-  const [to, setTo] = useState<LocationOption | null>(null);
-  const [passengerCounts, setPassengerCounts] = useState({ adults: 1, children: 0, infantsSeat: 0, infantsLap: 0 });
-  const [flightClass, setFlightClass] = useState(classes[0]);
+  const navigate = useNavigate();
+  const [tripType, setTripType] = useState(prefill?.tripType || "oneway");
+  const [from, setFrom] = useState<LocationOption | null>(getLocationOptionById(prefill?.from));
+  const [to, setTo] = useState<LocationOption | null>(getLocationOptionById(prefill?.to));
+  const [passengerCounts, setPassengerCounts] = useState({
+    adults: prefill?.adults ?? 1,
+    children: prefill?.children ?? 0,
+    infantsSeat: prefill?.infantsSeat ?? 0,
+    infantsLap: prefill?.infantsLap ?? 0,
+  });
+  const [flightClass, setFlightClass] = useState(
+    prefill?.flightClass && Object.keys(classes).includes(prefill.flightClass) ? prefill.flightClass : "economy",
+  );
   const [tripTypeOpen, setTripTypeOpen] = useState(false);
   const [tripTypeFocus, setTripTypeFocus] = useState(false);
   const [classOpen, setClassOpen] = useState(false);
   const [classFocus, setClassFocus] = useState(false);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
-  const [departureDate, setDepartureDate] = useState<Date | null>(null);
-  const [returnDate, setReturnDate] = useState<Date | null>(null);
+  const [departureDate, setDepartureDate] = useState<Date | null>(
+    prefill?.departureDate ? new Date(prefill.departureDate) : null,
+  );
+  const [returnDate, setReturnDate] = useState<Date | null>(prefill?.returnDate ? new Date(prefill.returnDate) : null);
   const [datePickerAnchor, setDatePickerAnchor] = useState<HTMLElement | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fallback to API if not found in cache or mock data
+  useEffect(() => {
+    const fetchAndCache = async (id: string, setter: (opt: LocationOption) => void) => {
+      if (locationOptionCache[id]) {
+        setter(locationOptionCache[id]);
+        return;
+      }
+      const [skyId] = id.split("_");
+      const res = await searchAirport(skyId);
+      if (res.status && res.data) {
+        const options = toLocationOptions(res.data);
+        const match = options.find((opt) => opt.id === id);
+        if (match) {
+          locationOptionCache[id] = match;
+          setter(match);
+        }
+      }
+    };
+    if (!from && prefill?.from) {
+      fetchAndCache(prefill.from, setFrom);
+    }
+    if (!to && prefill?.to) {
+      fetchAndCache(prefill.to, setTo);
+    }
+    // eslint-disable-next-line
+  }, [prefill?.from, prefill?.to]);
 
   const filledStyle = {
     background: theme.palette.mode === "light" ? "rgba(0, 0, 0, 0.06)" : "rgba(255, 255, 255, 0.09)",
@@ -284,17 +362,60 @@ const FlightSearch = () => {
     }
   };
 
+  const handleSearch = async () => {
+    setLoading(true);
+    try {
+      if (!from || !to || !departureDate) {
+        setLoading(false);
+        setError("Please select origin, destination, and departure date.");
+        return;
+      }
+      // Cache the selected locations for future prefill
+      locationOptionCache[from.id] = from;
+      locationOptionCache[to.id] = to;
+      // Build query params
+      const params = new URLSearchParams({
+        tripType,
+        from: from.id,
+        to: to.id,
+        departureDate: formatDate(departureDate),
+        ...(tripType === "round" && returnDate ? { returnDate: formatDate(returnDate) } : {}),
+        flightClass,
+        adults: String(passengerCounts.adults),
+        children: String(passengerCounts.children),
+        infantsSeat: String(passengerCounts.infantsSeat),
+        infantsLap: String(passengerCounts.infantsLap),
+      });
+      navigate(`/search?${params.toString()}`);
+    } catch (err) {
+      console.error("Flight search error:", err);
+      setError("An error occurred while searching for flights.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
+      {loading && <LinearProgress sx={{ position: "fixed", top: 0, left: 0, width: "100%", zIndex: 2000 }} />}
+      <Snackbar
+        open={!!error}
+        autoHideDuration={4000}
+        onClose={() => setError(null)}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}>
+        <Alert severity="error" onClose={() => setError(null)} sx={{ width: "100%" }}>
+          {error}
+        </Alert>
+      </Snackbar>
       <Paper
         elevation={3}
         sx={{
-          p: { xs: 2, md: 3 },
+          p: { xs: 1.5, sm: 2, md: 3 },
           borderRadius: 3,
           maxWidth: 950,
-          width: "100%",
+          width: "inherit",
           mx: "auto",
-          mt: { xs: 2, md: -7 },
+          mt: { xs: 1, sm: 2, md: -7 },
           position: "relative",
           zIndex: 2,
           background: theme.palette.background.paper,
@@ -304,9 +425,13 @@ const FlightSearch = () => {
           sx={{
             display: "flex",
             alignItems: "center",
-            gap: 2,
-            mb: 2,
+            gap: { xs: 1, sm: 2 },
+            mb: { xs: 1, sm: 2 },
             flexWrap: "wrap",
+            flexDirection: { xs: "column", sm: "row" },
+            width: "100%",
+            maxWidth: "100%",
+            minWidth: 0,
           }}>
           {/* Trip type */}
           <FormControl size="small" variant="standard" sx={tripTypeOpen || tripTypeFocus ? filledStyle : standardStyle}>
@@ -341,9 +466,9 @@ const FlightSearch = () => {
               onClose={() => setClassOpen(false)}
               onFocus={() => setClassFocus(true)}
               onBlur={() => setClassFocus(false)}>
-              {classes.map((c) => (
-                <MenuItem key={c} value={c}>
-                  {c}
+              {Object.entries(classes).map(([key, value]) => (
+                <MenuItem key={key} value={key}>
+                  {value}
                 </MenuItem>
               ))}
             </Select>
@@ -353,71 +478,64 @@ const FlightSearch = () => {
         <Box
           sx={{
             display: "flex",
-            alignItems: "center",
-            gap: 2,
+            alignItems: { xs: "flex-start", md: "center" },
+            gap: { xs: 1, sm: 2 },
             flexWrap: { xs: "wrap", md: "nowrap" },
+            flexDirection: { xs: "column", md: "row" },
             position: "relative",
+            width: "100%",
           }}>
-          <FlightAutocomplete type="whereFrom" placeholder="From" value={from} onChange={(opt) => setFrom(opt)} />
+          <Box sx={{ flex: 1, width: { xs: "100%", md: "auto" }, maxWidth: "100%", minWidth: 0 }}>
+            <FlightAutocomplete type="whereFrom" placeholder="From" value={from} onChange={(opt) => setFrom(opt)} />
+          </Box>
           {/* Swap button */}
-          <IconButton onClick={handleSwap} sx={{ border: "1px solid #e0e0e0", mx: 1 }}>
+          <IconButton
+            onClick={handleSwap}
+            sx={{ border: "1px solid #e0e0e0", mx: { xs: 0, md: 1 }, my: { xs: 1, md: 0 } }}>
             <SwapHorizIcon />
           </IconButton>
           {/* To */}
-
-          <FlightAutocomplete
-            type="whereTo"
-            placeholder="To"
-            value={to}
-            onChange={(v: LocationOption | null) => v && setTo(v)}
-          />
+          <Box sx={{ flex: 1, width: { xs: "100%", md: "auto" }, maxWidth: "100%", minWidth: 0 }}>
+            <FlightAutocomplete
+              type="whereTo"
+              placeholder="To"
+              value={to}
+              onChange={(v: LocationOption | null) => v && setTo(v)}
+            />
+          </Box>
           {/* Date picker */}
-
           <Box
-            ref={(el) => setDatePickerAnchor(el)}
+            ref={(el: HTMLElement | null) => setDatePickerAnchor(el)}
             sx={{
               px: 2,
               minHeight: 53,
-              width: "100%",
-              border: "1px solid #6b6b6b",
+              width: { xs: "90%", md: "auto" },
+              maxWidth: { xs: "320px", lg: "100%" },
+              border: `1px solid ${isDarkMode ? "#6b6b6b" : "#9a9a9a"}`,
               borderRadius: 1,
               flex: 1,
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              "&:hover": { borderColor: "#fff" },
+              mt: { xs: 1, md: 0 },
+              minWidth: 0,
+              "&:hover": {
+                borderColor: isDarkMode ? "#fff" : "#9a9a9a",
+              },
             }}
             onClick={() => setDatePickerOpen(true)}>
             <Box sx={{ display: "flex", alignItems: "center" }}>
               <CalendarToday sx={{ fontSize: 20, mr: 1 }} />
-              <Typography variant="caption" color="text.secondary">
-                {tripType === "oneway" ? "Departure" : "Departure - Return"}
+              {getDateRangeText() === "" && (
+                <Typography variant="caption" color="text.secondary">
+                  {tripType === "oneway" ? "Departure" : "Departure - Return"}
+                </Typography>
+              )}
+              <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                {getDateRangeText()}
               </Typography>
             </Box>
-            <Typography variant="body1" sx={{ fontWeight: 500 }}>
-              {getDateRangeText()}
-            </Typography>
           </Box>
-
-          {/* <FlightDatePicker
-            open={datePickerOpen}
-            onClose={() => setDatePickerOpen(false)}
-            selectedDate={departureDate}
-            selectedReturnDate={returnDate}
-            onDateSelect={(departure, returnDateSelected) => {
-              setDepartureDate(departure);
-              if (returnDateSelected) {
-                setReturnDate(returnDateSelected);
-              } else if (tripType === "One way") {
-                setReturnDate(null);
-              }
-            }}
-            tripType={tripType.toLowerCase().replace(" ", "-")}
-            onTripTypeChange={(type) => {
-              const formatted = type === "one-way" ? "One way" : type === "round-trip" ? "Round trip" : "Multi-city";
-              handleTripTypeChange(formatted);
-            }} 
-          />*/}
           <FlightDatePicker
             open={datePickerOpen}
             onClose={() => setDatePickerOpen(false)}
@@ -453,24 +571,29 @@ const FlightSearch = () => {
             display: "flex",
             justifyContent: "center",
             position: "relative",
-            mt: 3,
+            mt: { xs: 2, md: 3 },
+            width: "100%",
           }}>
           <Button
             variant="contained"
             size="large"
             sx={{
               borderRadius: 8,
-              px: 3,
+              px: { xs: 2, md: 3 },
               py: 1.2,
               fontWeight: 600,
               boxShadow: 3,
-              position: "absolute",
-              top: 8,
+              position: { xs: "static", md: "absolute" },
+              top: { md: 8 },
               zIndex: 10,
               backgroundColor: "primary.main",
+              width: { xs: "100%", sm: "auto" },
+              maxWidth: 320,
             }}
-            startIcon={<CalendarTodayIcon />}>
-            Search
+            startIcon={<Search />}
+            onClick={handleSearch}
+            disabled={loading}>
+            Explore
           </Button>
         </Box>
       </Paper>
