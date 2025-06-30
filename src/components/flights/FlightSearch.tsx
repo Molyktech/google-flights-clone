@@ -59,10 +59,7 @@ function PassengerSelector({ value, onChange }: PassengerSelectorProps) {
     setAnchorEl(event.currentTarget);
     setFocus(true);
   };
-  // const handleClose = () => {
-  //   setAnchorEl(null);
-  //   setFocus(false);
-  // };
+
   const handleDone = () => {
     onChange(draft);
     setAnchorEl(null);
@@ -258,7 +255,7 @@ const locationOptionCache: Record<string, LocationOption> = {};
 const getLocationOptionById = (id: string | undefined): LocationOption | null => {
   if (!id) return null;
   if (locationOptionCache[id]) return locationOptionCache[id];
-  // fallback to mock data for now
+  // fallback to mock data for now since rapid api is not working
   const options = toLocationOptions(MOCK_DATA.data);
   return options.find((opt) => opt.id === id) || null;
 };

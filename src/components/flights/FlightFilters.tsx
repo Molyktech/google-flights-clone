@@ -6,7 +6,6 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 const filterLabels = ["Stops", "Airlines", "Bags", "Price", "Times", "Emissions", "Connecting airports", "Duration"];
 
 const FlightFilters: React.FC = () => {
-  // For demo, all menus are closed. You can add state for each filter if needed.
   return (
     <Box
       sx={{

@@ -53,7 +53,6 @@ const FlightResult: React.FC<FlightResultProps> = ({ searchParams }) => {
           returnDate: formatToISODateString(searchParams.returnDate) || undefined,
           cabinClass: searchParams.flightClass || "economy",
           adults: searchParams.adults || 1,
-          // Optionally add children, infants, etc.
         });
         if (res.status === false) {
           let errorMsg: string | undefined;

@@ -72,7 +72,6 @@ const FlightResultCard: React.FC<FlightResultCardProps> = ({ itinerary, expanded
               </Typography>
             </Tooltip>
           </Grid>
-          {/* Remaining columns, spaced out */}
           <Grid size={{ xs: 6, sm: 3, md: 2 }} sx={{ ml: { md: 2 } }}>
             <Typography fontWeight={500} fontSize={{ xs: 15, md: 16 }}>
               {mainLeg.departure.slice(11, 16)} - {mainLeg.arrival.slice(11, 16)}

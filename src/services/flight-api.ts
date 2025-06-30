@@ -118,7 +118,6 @@ export const searchFlightsComplete = async (params: {
         messages: [],
         filterStats: {} as any,
       },
-      // Removed 'error' property as it is not part of SearchFlightResponse type
     };
   }
 };
@@ -173,7 +172,7 @@ export const getPriceCalendar = async (params: {
   //   },
   // };
 
-  // --- Original API call (commented out for easy revert) ---
+  // --- Original API call  ---
   const queryParams = new URLSearchParams({
     originSkyId: params.originSkyId,
     destinationSkyId: params.destinationSkyId,

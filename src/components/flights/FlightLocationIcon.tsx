@@ -1,9 +1,8 @@
-import PublicIcon from "@mui/icons-material/Public";
+import { Flight as FlightIcon } from "@mui/icons-material";
 import LocationCityIcon from "@mui/icons-material/LocationCity";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
+import PublicIcon from "@mui/icons-material/Public";
 import type { JSX } from "react";
-import { Flight as FlightIcon } from "@mui/icons-material";
-import React from "react";
 
 export function getLocationIcon(type: string): JSX.Element {
   switch (type) {

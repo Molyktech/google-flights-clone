@@ -147,7 +147,7 @@ const FlightDatePicker: React.FC<DatePickerProps> = ({
     }
   };
 
-  // Effect: load prices for current and next month when visible or month changes
+  // Effect: this will load prices for current and next month when visible or month changes
   useEffect(() => {
     if (fetchPrices && showPrices && searchParams?.originSkyId && searchParams?.destinationSkyId && open) {
       loadMonthPrices(currentMonth);
